@@ -679,7 +679,7 @@ function openCartModal(){
       <img class="cart-item-img" src="${c.img}" alt="${c.title}">
       <div class="cart-item-info">
         <div class="cart-item-title">${c.title}</div>
-        <div class="cart-item-meta">${c.qty===1 ? 'Tập '+c.from : 'Tập '+c.from+' → '+(c.from+c.qty-1)+' · '+c.qty+' tập'}</div>
+        <div class="cart-item-meta">Tập ${c.from} · ${c.qty} quyển</div>
         <div class="qty-row">
           <button type="button" class="qty-btn" onclick="changeCartQty(${i},-1)">−</button>
           <input class="qty-input" type="number" value="${c.qty}" min="1" onchange="setCartQty(${i},this.value)">
@@ -753,7 +753,7 @@ function proceedOrder(){
   const total = m.pricePerVol * qty;
   const orderId = genOrderId();
   const date = new Date().toLocaleDateString('vi-VN');
-  currentOrderInfo = {orderId, title:m.title, vols:qty, total, date, email:currentUser, img:m.img, volRange:`tập ${from}→${from+qty-1}`};
+  currentOrderInfo = {orderId, title:m.title, vols:qty, volFrom:from, total, date, email:currentUser, img:m.img, volRange:`tập ${from}→${from+qty-1}`};
   // Hiện modal chọn phương thức thanh toán
   document.getElementById('pm-title').textContent = m.title;
   document.getElementById('pm-volumes').textContent = qty + ' tập';
@@ -903,7 +903,7 @@ window.addEventListener('DOMContentLoaded', function(){
 /* ========== CONFIRM PAYMENT ========== */
 async function confirmPayment(){
   if(!currentOrderInfo){ return; }
-  const {orderId,title,vols,total,date,email,img,payMethod,codName,codPhone,codAddress} = currentOrderInfo;
+  const {orderId,title,vols,volFrom,total,date,email,img,payMethod,codName,codPhone,codAddress,volRange,itemsSummary,isCart} = currentOrderInfo;
   if(!email){ showToast('⚠️ Thiếu thông tin tài khoản.'); return; }
   const isCOD = payMethod === 'COD';
   // Save to history
@@ -915,6 +915,10 @@ async function confirmPayment(){
   if(ejsCfg){
     showToast('📨 Đang gửi email xác nhận...', 2000);
     const totalStr = fmt(total);
+    // Tạo mô tả sản phẩm rõ ràng
+    const volumeDesc = isCart
+      ? cart.map(c=>c.title).join(', ')
+      : title;
     const deliveryInfo = isCOD
       ? `COD - Giao hàng tới: ${codName} | ${codPhone} | ${codAddress}`
       : 'Thanh toán Online (VietQR)';
@@ -923,8 +927,9 @@ async function confirmPayment(){
       to_email: email,
       email: email,
       order_id: orderId,
-      manga_title: title,
-      volumes: String(vols) + ' tập',
+      manga_title: volumeDesc,
+      volumes: String(vols) + ' quyển',
+      tap: isCart ? '—' : String(volFrom),
       date: date,
       total: isCOD ? totalStr + ' + 15.000đ phí ship' : totalStr,
       pay_method: deliveryInfo
@@ -935,18 +940,17 @@ async function confirmPayment(){
       to_email: OWNER_EMAIL,
       email: OWNER_EMAIL,
       order_id: orderId,
-      manga_title: title,
-      volumes: String(vols) + ' tập',
+      manga_title: volumeDesc,
+      volumes: String(vols) + ' quyển',
+      tap: isCart ? '—' : String(volFrom),
       date: date,
       total: isCOD ? totalStr + ' + 15.000đ phí ship' : totalStr,
-      pay_method: isCOD
-        ? `COD — Thanh toán khi nhận hàng`
-        : `Thanh toán Online (VietQR)`,
+      pay_method: isCOD ? `COD — Thanh toán khi nhận hàng` : `Thanh toán Online (VietQR)`,
       customer_email: email,
       customer_name: email,
       customer_phone: codPhone || '—',
       customer_address: codAddress || '—',
-      order_summary: `📚 Truyện: ${title} | 📦 Số tập: ${String(vols)} tập | 💰 Tổng: ${isCOD ? totalStr + ' + 15.000đ phí ship' : totalStr} | 📅 Ngày: ${date}`
+      order_summary: `📚 ${volumeDesc} | 📦 Số lượng: ${vols} tập | 💰 Tổng: ${isCOD ? totalStr + ' + 15.000đ phí ship' : totalStr} | 📅 Ngày: ${date}`
     };
     console.log('[EmailJS] Sending customer email:', paramsCustomer);
     console.log('[EmailJS] Sending owner email:', paramsOwner);
