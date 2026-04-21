@@ -60,6 +60,14 @@
     /* ===== GRID ===== */
     .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:28px}
 
+    /* ===== PAGINATION ===== */
+    .pagination{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:32px;flex-wrap:wrap}
+    .page-btn{min-width:40px;height:40px;padding:0 12px;border:2px solid var(--navy);background:#fff;color:var(--navy);font-family:'Be Vietnam Pro',system-ui,sans-serif;font-weight:800;font-size:.95rem;border-radius:8px;cursor:pointer;box-shadow:2px 2px 0 var(--navy);transition:all .15s;display:inline-flex;align-items:center;justify-content:center}
+    .page-btn:hover:not(:disabled):not(.active){background:var(--yellow);transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--navy)}
+    .page-btn.active{background:var(--red);color:#fff;border-color:var(--navy)}
+    .page-btn:disabled{opacity:.4;cursor:not-allowed;box-shadow:none}
+    .page-ellipsis{padding:0 4px;color:#888;font-weight:800}
+
     /* ===== CARD ===== */
     .card{background:var(--card);border:3px solid var(--navy);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column;transition:transform .15s,box-shadow .15s;cursor:pointer;opacity:0;transform:translateY(24px);animation:fadeUp .5s forwards}
     @keyframes fadeUp{to{opacity:1;transform:none}}
@@ -280,6 +288,7 @@
 
   <div class="grid" id="manga-grid"></div>
   <p id="no-result" style="display:none;text-align:center;padding:32px;color:#999;font-size:1rem;">😞 Không tìm thấy truyện phù hợp.</p>
+  <nav class="pagination" id="pagination" aria-label="Phân trang"></nav>
 </section>
 
 <!-- HOW TO ORDER -->
@@ -397,9 +406,9 @@
       </div>
     </div>
 
-    <!-- COD ADDRESS FORM -->
+    <!-- RECIPIENT INFO FORM (cho cả COD và Online) -->
     <div id="cod-section" style="display:none">
-      <div class="cod-info">
+      <div class="cod-info" id="ship-info-box">
         🚚 <strong>Giao hàng toàn quốc</strong> — Thanh toán tiền mặt khi nhận hàng.<br>
         Phí ship: <strong>15.000đ</strong> · Thời gian: <strong>2–5 ngày làm việc</strong>
       </div>
@@ -536,14 +545,42 @@ function showToast(msg,dur=3000){
 function closeModal(id){ document.getElementById(id).classList.remove('active'); }
 function openModal(id){ document.getElementById(id).classList.add('active'); }
 
-/* ========== RENDER CARDS ========== */
+/* ========== RENDER CARDS WITH PAGINATION ========== */
+const ROWS_PER_PAGE = 4;
+let currentPage = 1;
+let currentList = mangas.slice();
+
+function getColsCount(){
+  const grid = document.getElementById('manga-grid');
+  const styles = getComputedStyle(grid);
+  const cols = styles.gridTemplateColumns.split(' ').filter(Boolean).length;
+  return Math.max(1, cols);
+}
+function getPageSize(){ return ROWS_PER_PAGE * getColsCount(); }
+
 function renderCards(list){
+  currentList = list;
   const grid = document.getElementById('manga-grid');
   const noResult = document.getElementById('no-result');
+  const pag = document.getElementById('pagination');
   grid.innerHTML='';
-  if(!list.length){ noResult.style.display='block'; return; }
+  if(!list.length){
+    noResult.style.display='block';
+    pag.innerHTML='';
+    return;
+  }
   noResult.style.display='none';
-  list.forEach((m,i)=>{
+
+  // Render once invisibly to detect column count, then paginate
+  const pageSize = getPageSize();
+  const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
+  if(currentPage > totalPages) currentPage = totalPages;
+  if(currentPage < 1) currentPage = 1;
+
+  const start = (currentPage-1) * pageSize;
+  const pageItems = list.slice(start, start + pageSize);
+
+  pageItems.forEach((m,i)=>{
     const realIdx = mangas.indexOf(m);
     grid.innerHTML+=`
     <article class="card" style="animation-delay:${i*0.05}s" onclick="openDetailModal(${realIdx})">
@@ -565,8 +602,39 @@ function renderCards(list){
       <button type="button" class="btn-order" onclick="event.stopPropagation();openDetailModal(${realIdx})">🛒 Đặt Mua</button>
     </article>`;
   });
+
+  renderPagination(totalPages);
 }
+
+function renderPagination(totalPages){
+  const pag = document.getElementById('pagination');
+  if(totalPages <= 1){ pag.innerHTML=''; return; }
+  const p = currentPage;
+  let html = '';
+  html += `<button type="button" class="page-btn" onclick="goToPage(${p-1})" ${p===1?'disabled':''} aria-label="Trang trước">‹</button>`;
+
+  // Build page numbers with ellipsis
+  const pages = new Set([1, totalPages, p, p-1, p+1]);
+  const list = [...pages].filter(n=>n>=1 && n<=totalPages).sort((a,b)=>a-b);
+  let prev = 0;
+  list.forEach(n=>{
+    if(n - prev > 1) html += `<span class="page-ellipsis">…</span>`;
+    html += `<button type="button" class="page-btn ${n===p?'active':''}" onclick="goToPage(${n})">${n}</button>`;
+    prev = n;
+  });
+
+  html += `<button type="button" class="page-btn" onclick="goToPage(${p+1})" ${p===totalPages?'disabled':''} aria-label="Trang sau">›</button>`;
+  pag.innerHTML = html;
+}
+
+function goToPage(n){
+  currentPage = n;
+  renderCards(currentList);
+  document.getElementById('catalog')?.scrollIntoView({behavior:'smooth'});
+}
+
 renderCards(mangas);
+window.addEventListener('resize', ()=>{ renderCards(currentList); });
 
 /* ========== SEARCH & FILTER ========== */
 function applyFilter(){
@@ -579,6 +647,7 @@ function applyFilter(){
     const matchGenre = genre==='all' || m.genre===genre;
     return matchQ && matchType && matchGenre;
   });
+  currentPage = 1;
   renderCards(result);
 }
 document.getElementById('search-input').addEventListener('input', applyFilter);
@@ -777,7 +846,17 @@ function selectPayMethod(method){
   selectedPayMethod = method;
   document.getElementById('pay-online-card').classList.toggle('selected', method==='online');
   document.getElementById('pay-cod-card').classList.toggle('selected', method==='cod');
-  document.getElementById('cod-section').style.display = method==='cod' ? 'block' : 'none';
+  // Hiện form thông tin người nhận cho CẢ Online và COD
+  document.getElementById('cod-section').style.display = 'block';
+  // Cập nhật nội dung khung info tuỳ phương thức
+  const infoBox = document.getElementById('ship-info-box');
+  if(infoBox){
+    if(method==='online'){
+      infoBox.innerHTML = '📱 <strong>Thanh toán Online qua VietQR</strong> — Sau khi chuyển khoản, đơn hàng sẽ được giao đến địa chỉ bên dưới.<br>Phí ship: <strong>Miễn phí</strong> · Thời gian: <strong>2–4 ngày làm việc</strong>';
+    } else {
+      infoBox.innerHTML = '🚚 <strong>Giao hàng toàn quốc</strong> — Thanh toán tiền mặt khi nhận hàng.<br>Phí ship: <strong>15.000đ</strong> · Thời gian: <strong>2–5 ngày làm việc</strong>';
+    }
+  }
   const btn = document.getElementById('pay-confirm-btn');
   btn.style.opacity = '1';
   btn.style.pointerEvents = 'auto';
@@ -787,18 +866,20 @@ function selectPayMethod(method){
 function confirmPayMethod(){
   if(!selectedPayMethod) return;
   if(!currentOrderInfo){ showToast('⚠️ Phiên đặt hàng đã hết, vui lòng thử lại.'); closeModal('pay-method-modal'); return; }
+  // Validate thông tin người nhận cho CẢ Online và COD
+  const name = document.getElementById('cod-name').value.trim();
+  const phone = document.getElementById('cod-phone').value.trim();
+  const address = document.getElementById('cod-address').value.trim();
+  const err = document.getElementById('cod-error');
+  err.style.display='none';
+  if(!name||!phone||!address){ err.textContent='Vui lòng điền đầy đủ thông tin người nhận.'; err.style.display='block'; return; }
+  if(!/^(0|\+84)[0-9]{8,9}$/.test(phone)){ err.textContent='Số điện thoại không hợp lệ.'; err.style.display='block'; return; }
+  // Lưu thông tin người nhận vào đơn (dùng chung field codName/codPhone/codAddress)
+  currentOrderInfo.codName = name;
+  currentOrderInfo.codPhone = phone;
+  currentOrderInfo.codAddress = address;
   if(selectedPayMethod === 'cod'){
-    const name = document.getElementById('cod-name').value.trim();
-    const phone = document.getElementById('cod-phone').value.trim();
-    const address = document.getElementById('cod-address').value.trim();
-    const err = document.getElementById('cod-error');
-    err.style.display='none';
-    if(!name||!phone||!address){ err.textContent='Vui lòng điền đầy đủ thông tin giao hàng.'; err.style.display='block'; return; }
-    if(!/^(0|\+84)[0-9]{8,9}$/.test(phone)){ err.textContent='Số điện thoại không hợp lệ.'; err.style.display='block'; return; }
     currentOrderInfo.payMethod = 'COD';
-    currentOrderInfo.codName = name;
-    currentOrderInfo.codPhone = phone;
-    currentOrderInfo.codAddress = address;
     closeModal('pay-method-modal');
     confirmPayment();
   } else {
@@ -917,8 +998,8 @@ async function confirmPayment(){
     const totalStr = fmt(total);
     // Tạo mô tả sản phẩm rõ ràng
     const volumeDesc = isCart
-      ? cart.map(c=>c.title).join(', ')
-      : title;
+      ? currentOrderInfo.cartItems.map(c=>`${c.title} (tập ${c.from})`).join(', ')
+      : `${title} (tập ${volFrom})`;
     const deliveryInfo = isCOD
       ? `COD - Giao hàng tới: ${codName} | ${codPhone} | ${codAddress}`
       : 'Thanh toán Online (VietQR)';
@@ -929,7 +1010,7 @@ async function confirmPayment(){
       order_id: orderId,
       manga_title: volumeDesc,
       volumes: String(vols) + ' quyển',
-      tap: isCart ? '—' : String(volFrom),
+      tap: volumeDesc,
       date: date,
       total: isCOD ? totalStr + ' + 15.000đ phí ship' : totalStr,
       pay_method: deliveryInfo
@@ -942,7 +1023,7 @@ async function confirmPayment(){
       order_id: orderId,
       manga_title: volumeDesc,
       volumes: String(vols) + ' quyển',
-      tap: isCart ? '—' : String(volFrom),
+      tap: volumeDesc,
       date: date,
       total: isCOD ? totalStr + ' + 15.000đ phí ship' : totalStr,
       pay_method: isCOD ? `COD — Thanh toán khi nhận hàng` : `Thanh toán Online (VietQR)`,
